@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
+import Signup from './pages/Signup';
+import ForgotPassword from './pages/ForgotPassword';
 import AdminDashboard from './pages/admin/Dashboard';
 import ManageStudents from './pages/admin/ManageStudents';
 import ManageTeachers from './pages/admin/ManageTeachers';
@@ -35,6 +37,8 @@ function App() {
     <Routes>
       <Route path="/" element={<HomeRedirect />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<Signup />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
 
       {/* Admin routes */}
       <Route
