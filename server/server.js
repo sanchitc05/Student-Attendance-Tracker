@@ -27,6 +27,17 @@ app.use(cors());
 app.use(express.json({ limit: '10kb' }));
 
 // Sanitize MongoDB operators ($ and .) to prevent NoSQL injection
+// Express 5 exposes req.query as a getter. Give it a writable own
+// property first so express-mongo-sanitize can replace the sanitized value.
+app.use((req, res, next) => {
+  Object.defineProperty(req, 'query', {
+    value: req.query,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
+  next();
+});
 app.use(mongoSanitize());
 
 // General API rate limiter
