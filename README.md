@@ -270,17 +270,6 @@ Time:        4.75 s
 
 ---
 
-## 🔑 Demo Credentials
-
-| Role | Email | Password | Details |
-|---|---|---|---|
-| **Admin** | `admin@college.edu` | `Admin@12345` | Full system administration |
-| **Teacher** | `teacher@college.edu` | `Teacher@123` | Assigned to Mathematics & CS subjects |
-| **Student (At Risk)** | `student1@college.edu` | `Student@123` | Enrolled with attendance below 75% |
-| **Student (Safe)** | `student2@college.edu` | `Student@123` | Enrolled with attendance above 75% |
-
----
-
 ## 📸 Screenshots
 
 | Feature | Preview |
