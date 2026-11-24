@@ -20,10 +20,33 @@ const app = express();
 // Security HTTP headers
 app.use(helmet());
 
-// Cross-Origin Resource Sharing
-app.use(cors());
+// Cross-Origin Resource Sharing (CORS)
+// Configure allowed origins for production (Vercel) and development (localhost)
+const allowedOrigins = process.env.CLIENT_URL
+  ? process.env.CLIENT_URL.split(',').map((origin) => origin.trim())
+  : ['http://localhost:5173', 'http://localhost:3000'];
 
-// Body parser
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. mobile apps, curl, Postman, server-to-server)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
+        return callback(null, true);
+      }
+
+      const corsError = new Error(`Origin ${origin} is not allowed by CORS`);
+      corsError.statusCode = 403;
+      return callback(corsError, false);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  })
+);
+
+// Body parser (10kb limit to mitigate large payload DoS)
 app.use(express.json({ limit: '10kb' }));
 
 // Sanitize MongoDB operators ($ and .) to prevent NoSQL injection
@@ -54,7 +77,7 @@ const apiLimiter = rateLimit({
 });
 app.use('/api', apiLimiter);
 
-// Health check endpoint
+// Health check endpoint (used by Render for zero-downtime health probes)
 app.get('/api/health', (req, res) => {
   const dbStates = {
     0: 'disconnected',
@@ -90,6 +113,7 @@ app.use((req, res, next) => {
 // Centralized Error Handling Middleware
 app.use(errorHandler);
 
+// Render sets the PORT dynamically in production
 const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
@@ -109,4 +133,8 @@ const startServer = async () => {
   }
 };
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = app;
