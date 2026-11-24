@@ -12,35 +12,73 @@ const formatUser = (user) => ({
   createdAt: user.createdAt,
 });
 
+// @desc    Get users with optional search, filters, and pagination
+// @route   GET /api/users
+// @access  Private/Admin
 const getUsers = async (req, res, next) => {
   try {
-    const { role, semester, department, search } = req.query;
+    const { role, semester, department, search, page: pageQuery, limit: limitQuery } = req.query;
     const query = {};
 
     if (role) query.role = role;
     if (semester) query.semester = Number(semester);
     if (department) query.department = department;
 
-    if (search) {
+    if (search && search.trim()) {
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { rollNo: { $regex: search, $options: 'i' } },
+        { name: { $regex: search.trim(), $options: 'i' } },
+        { email: { $regex: search.trim(), $options: 'i' } },
+        { rollNo: { $regex: search.trim(), $options: 'i' } },
       ];
     }
 
-    const users = await User.find(query).sort({ createdAt: -1 });
+    // If neither page nor limit is requested, return the full list
+    // (Used by dropdown selectors in subject assignment)
+    if (!pageQuery && !limitQuery) {
+      const users = await User.find(query).sort({ createdAt: -1 });
+      return res.status(200).json({
+        success: true,
+        message: 'Users fetched successfully',
+        data: users.map(formatUser),
+      });
+    }
+
+    // Paginated flow for admin user lists
+    const page = Math.max(1, parseInt(pageQuery, 10) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(limitQuery, 10) || 10));
+    const skip = (page - 1) * limit;
+
+    const total = await User.countDocuments(query);
+    const users = await User.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const totalPages = Math.ceil(total / limit) || 1;
 
     res.status(200).json({
       success: true,
       message: 'Users fetched successfully',
-      data: users.map(formatUser),
+      data: {
+        users: users.map(formatUser),
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages,
+          hasPrevPage: page > 1,
+          hasNextPage: page < totalPages,
+        },
+      },
     });
   } catch (error) {
     next(error);
   }
 };
 
+// @desc    Get user statistics (total students and teachers)
+// @route   GET /api/users/stats
+// @access  Private/Admin
 const getUserStats = async (req, res, next) => {
   try {
     const totalStudents = await User.countDocuments({ role: 'student' });
@@ -59,16 +97,12 @@ const getUserStats = async (req, res, next) => {
   }
 };
 
+// @desc    Update user details
+// @route   PUT /api/users/:id
+// @access  Private/Admin
 const updateUser = async (req, res, next) => {
   try {
     const { id } = req.params;
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      const error = new Error('Invalid user ID');
-      error.statusCode = 400;
-      throw error;
-    }
-
     const { name, email, role, rollNo, semester, department } = req.body;
 
     const user = await User.findById(id);
@@ -106,15 +140,12 @@ const updateUser = async (req, res, next) => {
   }
 };
 
+// @desc    Delete user
+// @route   DELETE /api/users/:id
+// @access  Private/Admin
 const deleteUser = async (req, res, next) => {
   try {
     const { id } = req.params;
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      const error = new Error('Invalid user ID');
-      error.statusCode = 400;
-      throw error;
-    }
 
     const user = await User.findByIdAndDelete(id);
     if (!user) {

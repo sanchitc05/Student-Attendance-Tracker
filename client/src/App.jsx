@@ -10,6 +10,7 @@ import TeacherDashboard from './pages/teacher/Dashboard';
 import MarkAttendance from './pages/teacher/MarkAttendance';
 import ClassReport from './pages/teacher/ClassReport';
 import StudentDashboard from './pages/student/Dashboard';
+import NotFound from './pages/NotFound';
 
 function HomeRedirect() {
   const { user, loading } = useAuth();
@@ -113,7 +114,8 @@ function App() {
         }
       />
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {/* 404 Fallback route */}
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }

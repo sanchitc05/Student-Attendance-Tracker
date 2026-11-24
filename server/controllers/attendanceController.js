@@ -350,9 +350,181 @@ const getAttendanceByDate = async (req, res, next) => {
   }
 };
 
+// @desc    Get attendance summary & history for logged-in student
+// @route   GET /api/attendance/student/me
+// @access  Private/Student
+const getStudentAttendance = async (req, res, next) => {
+  try {
+    const studentId = new mongoose.Types.ObjectId(req.user._id);
+
+    // Aggregation pipeline to retrieve enrolled subjects, teacher info, and attendance records
+    const subjectsAttendance = await Subject.aggregate([
+      {
+        $match: {
+          students: studentId,
+        },
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'teacher',
+          foreignField: '_id',
+          as: 'teacherInfo',
+        },
+      },
+      {
+        $unwind: {
+          path: '$teacherInfo',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $lookup: {
+          from: 'attendances',
+          let: { subjId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ['$subject', '$$subjId'] },
+              },
+            },
+            {
+              $project: {
+                date: 1,
+                record: {
+                  $filter: {
+                    input: '$records',
+                    as: 'rec',
+                    cond: { $eq: ['$$rec.student', studentId] },
+                  },
+                },
+              },
+            },
+            {
+              $unwind: {
+                path: '$record',
+                preserveNullAndEmptyArrays: false,
+              },
+            },
+            {
+              $project: {
+                date: 1,
+                status: '$record.status',
+              },
+            },
+            {
+              $sort: { date: -1 },
+            },
+          ],
+          as: 'sessions',
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+          name: 1,
+          code: 1,
+          semester: 1,
+          teacher: { $ifNull: ['$teacherInfo.name', 'Not Assigned'] },
+          totalClasses: { $size: '$sessions' },
+          classesAttended: {
+            $size: {
+              $filter: {
+                input: '$sessions',
+                as: 'session',
+                cond: { $eq: ['$$session.status', 'present'] },
+              },
+            },
+          },
+          history: '$sessions',
+        },
+      },
+      {
+        $sort: { code: 1 },
+      },
+    ]);
+
+    let overallTotalClasses = 0;
+    let overallAttendedClasses = 0;
+
+    const processedSubjects = subjectsAttendance.map((subj) => {
+      const { totalClasses, classesAttended } = subj;
+      overallTotalClasses += totalClasses;
+      overallAttendedClasses += classesAttended;
+
+      let percentage = 0;
+      let classesNeeded = 0;
+      let classesCanMiss = 0;
+
+      // Handle zero classes safely to avoid division by zero
+      if (totalClasses > 0) {
+        percentage = Number(((classesAttended / totalClasses) * 100).toFixed(1));
+
+        if (percentage < 75) {
+          // Formula to reach 75%:
+          // (classesAttended + x) / (totalClasses + x) >= 0.75 = 3/4
+          // 4 * (classesAttended + x) >= 3 * (totalClasses + x)
+          // 4 * classesAttended + 4x >= 3 * totalClasses + 3x
+          // x >= 3 * totalClasses - 4 * classesAttended
+          classesNeeded = Math.max(0, 3 * totalClasses - 4 * classesAttended);
+          classesCanMiss = 0;
+        } else {
+          // Formula for classes that can still be missed while staying >= 75%:
+          // classesAttended / (totalClasses + y) >= 0.75 = 3/4
+          // 4 * classesAttended >= 3 * (totalClasses + y)
+          // 3y <= 4 * classesAttended - 3 * totalClasses
+          // y <= (4 * classesAttended - 3 * totalClasses) / 3
+          classesCanMiss = Math.max(
+            0,
+            Math.floor((4 * classesAttended - 3 * totalClasses) / 3)
+          );
+          classesNeeded = 0;
+        }
+      }
+
+      return {
+        _id: subj._id,
+        name: subj.name,
+        code: subj.code,
+        semester: subj.semester,
+        teacher: subj.teacher,
+        totalClasses,
+        classesAttended,
+        percentage,
+        classesNeeded,
+        classesCanMiss,
+        isBelowThreshold: totalClasses > 0 && percentage < 75,
+        history: subj.history || [],
+      };
+    });
+
+    const overallPercentage =
+      overallTotalClasses > 0
+        ? Number(((overallAttendedClasses / overallTotalClasses) * 100).toFixed(1))
+        : 0;
+
+    res.status(200).json({
+      success: true,
+      message: 'Student attendance retrieved successfully',
+      data: {
+        overall: {
+          totalClasses: overallTotalClasses,
+          classesAttended: overallAttendedClasses,
+          percentage: overallPercentage,
+          isBelowThreshold: overallTotalClasses > 0 && overallPercentage < 75,
+        },
+        subjects: processedSubjects,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   markAttendance,
   updateAttendance,
   getClassReport,
   getAttendanceByDate,
+  getStudentAttendance,
 };

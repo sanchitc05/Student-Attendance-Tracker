@@ -37,9 +37,9 @@ function ManageSubjects() {
         api.get('/users?role=student'),
       ]);
 
-      setSubjects(subjectsRes.data.data);
-      setTeachers(teachersRes.data.data);
-      setStudents(studentsRes.data.data);
+      setSubjects(subjectsRes.data.data || []);
+      setTeachers(teachersRes.data.data?.users || teachersRes.data.data || []);
+      setStudents(studentsRes.data.data?.users || studentsRes.data.data || []);
     } catch (error) {
       toast.error('Failed to load subjects and users');
     } finally {

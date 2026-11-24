@@ -19,6 +19,9 @@ const formatUser = (user) => ({
   department: user.department || null,
 });
 
+// @desc    Authenticate user & get token
+// @route   POST /api/auth/login
+// @access  Public
 const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
@@ -46,6 +49,9 @@ const login = async (req, res, next) => {
   }
 };
 
+// @desc    Register a new user (admin only)
+// @route   POST /api/auth/register
+// @access  Private/Admin
 const register = async (req, res, next) => {
   try {
     const { name, email, password, role, rollNo, semester, department } = req.body;
@@ -53,7 +59,7 @@ const register = async (req, res, next) => {
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       const error = new Error('Email is already registered');
-      error.statusCode = 400;
+      error.statusCode = 409;
       throw error;
     }
 
@@ -79,6 +85,9 @@ const register = async (req, res, next) => {
   }
 };
 
+// @desc    Get current logged in user
+// @route   GET /api/auth/me
+// @access  Private
 const getMe = async (req, res, next) => {
   try {
     res.status(200).json({
@@ -93,4 +102,42 @@ const getMe = async (req, res, next) => {
   }
 };
 
-module.exports = { login, register, getMe };
+// @desc    Change user password
+// @route   PUT /api/auth/change-password
+// @access  Private (All roles)
+const changePassword = async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    // Fetch user with password field included
+    const user = await User.findById(req.user._id).select('+password');
+
+    if (!user) {
+      const error = new Error('User not found');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    // Verify current password
+    const isMatch = await user.matchPassword(currentPassword);
+    if (!isMatch) {
+      const error = new Error('Current password is incorrect');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    // Update password (triggers pre('save') bcrypt hashing)
+    user.password = newPassword;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Password changed successfully',
+      data: null,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { login, register, getMe, changePassword };
